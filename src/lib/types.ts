@@ -148,6 +148,8 @@ export interface Patient {
   room: string | null;
   bed: string | null;
   unit_id: string | null;
+  /** Age in years. Prefer this for display; age_band is the equity grouping key. */
+  age?: number | null;
   age_band: string | null;
   sex: string | null;
   race_code: string | null;

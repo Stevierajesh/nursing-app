@@ -104,9 +104,43 @@ The default page is the unit map (`/`); `/map` redirects there. Board lives at
 `/board`. The map shows room/bed occupancy and risk for patients the user can
 access. Unassigned occupied beds show occupancy without patient identity.
 
-Bottom navigation opens Board, Patients, Map, Meds, and Alerts. The Board has
+Navigation opens Board, Patients, Map, Meds, and Alerts. The Board has
 inline worry capture and a priority list. Patients supports risk, worry, and
 natural bed sorting. Data refreshes every 30 seconds and after mutations.
+
+## Phone, tablet and desktop
+
+One shell, `src/components/AppShell.tsx`, serves both roles at every size.
+
+**Two breakpoints, and the difference between them matters.**
+
+`desk` — defined in `index.css` as `(min-width: 64rem) and (pointer: fine)` —
+gates **chrome**: the nav, the brand bar, the content measure, the map panel's
+bottom clearance. It is deliberately not `lg`. An iPad in landscape is exactly
+1024px, which *is* `lg`, and the 12.9" Pro is 1366px — wider than plenty of
+laptops — so width alone put a desktop sidebar on the tablet, where the bottom
+pill is the whole point: it sits under the thumb of whoever is holding it.
+`pointer: fine` is the honest discriminator. iPadOS reports `coarse` even with
+a Magic Keyboard attached; a laptop reports `fine` even when its screen is a
+touchscreen.
+
+Plain `lg:` gates **content**: the two-column layouts inside a screen. Whether
+two columns fit is a question about width and nothing else, and the tablet has
+the width — so the iPad keeps the side-by-side Risk board, worry capture and
+Respond.
+
+So: touch devices of any size keep the nurse's floating pill and the doctor's
+strip from doc pages 22–26, unchanged. A pointer-driven screen at 1024px or
+wider gets a persistent left sidebar carrying the mark, role chip, the five
+destinations and the account control, with the brand bar hidden — a pill
+centred under a 1512px window is phone chrome stranded on a workstation, and it
+floated over the last row of Patients, Meds and Alerts. Content is capped at
+`max-w-7xl` and centred; uncapped, the patients table stretched its columns to
+the window edge.
+
+**Testing this:** DevTools "Responsive" mode with no device selected reports
+`pointer: fine`, so you will get the sidebar at ≥1024px. Pick an actual iPad
+preset, or use a real device, to see the tablet layout.
 
 Assigned nurses, charge nurses, and admins can acknowledge and assess an
 escalation from Alerts or Respond. Timestamps are server-written and retries

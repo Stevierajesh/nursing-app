@@ -1,16 +1,43 @@
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import EscalationActions from "../components/EscalationActions";
+import PatientVitals from "../components/PatientVitals";
 import { Card, ErrorNote, Spinner } from "../components/Primitives";
+import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { usePatients } from "../lib/patients";
 import { patientLocation } from "../lib/patientOrder";
 import { patientPriority, riskOutOfTen } from "../lib/risk";
-import { REASON_LABELS, WORRY_LABELS } from "../lib/types";
+import { REASON_LABELS, WORRY_LABELS, type PatientDetail } from "../lib/types";
 
 export default function Response() {
   const { patientId } = useParams();
   const { me } = useAuth();
   const { patients, loading, error } = usePatients();
+  /*
+   * The patient list carries one latest-vitals snapshot, not the series, so
+   * this screen used to show an escalation with no observations behind it --
+   * a nurse was asked to acknowledge a NEWS 7 without being shown the numbers
+   * that produced it. Same detail fetch and 15s cadence as the worry screen.
+   */
+  const [detail, setDetail] = useState<PatientDetail | null>(null);
+  useEffect(() => {
+    if (!patientId) return;
+    let active = true;
+    const load = () =>
+      api
+        .get<PatientDetail>(`/api/v1/patients/${patientId}`)
+        .then((d) => active && setDetail(d))
+        .catch(() => {
+          /* The escalation actions below stay usable without the series. */
+        });
+    void load();
+    const timer = setInterval(() => void load(), 15000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [patientId]);
   const p = patients.find((p) => p.id === patientId);
   if (loading) return <Spinner />;
   const priority = p ? patientPriority(p) : null;
@@ -33,7 +60,7 @@ export default function Response() {
         {
           label: "Age · sex",
           value:
-            [p.age_band, p.sex].filter(Boolean).join(" · ") || "Not recorded",
+            [p.age ?? p.age_band, p.sex].filter(Boolean).join(" · ") || "Not recorded",
         },
         { label: "Room", value: patientLocation(p) },
         {
@@ -70,6 +97,13 @@ export default function Response() {
             </h2>
           </header>
 
+          {/* Same split as the worry screen: what happened on the left, what
+              you do about it on the right. Stacked at desktop width the
+              acknowledge buttons sat below the fold under six vitals cards,
+              which is the wrong place for the only control on an overdue
+              escalation. */}
+          <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+          <div className="flex min-w-0 flex-col gap-5">
           <Card>
             <dl className="grid grid-cols-2 gap-4">
               {details.map((d) => (
@@ -118,19 +152,33 @@ export default function Response() {
             </Card>
           )}
 
-          {p.open_escalation ? (
-            <EscalationActions patient={p} />
-          ) : (
-            <Card>
-              No open escalation. The response has been recorded or the alert is
-              closed.
-            </Card>
+          {/* Before the acknowledge form in reading order on purpose: read the
+              observations, then respond to them. */}
+          {detail && (
+            <PatientVitals
+              patient={detail.patient}
+              vitals={detail.vitals}
+              bands={detail.vital_bands}
+            />
           )}
-          {me?.user.role !== "prescriber" && (
-            <Link to={`/worry/${p.id}`} className="block text-accent">
-              Review patient and record worry →
-            </Link>
-          )}
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-5">
+            {p.open_escalation ? (
+              <EscalationActions patient={p} />
+            ) : (
+              <Card>
+                No open escalation. The response has been recorded or the alert
+                is closed.
+              </Card>
+            )}
+            {me?.user.role !== "prescriber" && (
+              <Link to={`/worry/${p.id}`} className="block text-accent">
+                Review patient and record worry →
+              </Link>
+            )}
+          </div>
+          </div>
         </>
       )}
     </div>

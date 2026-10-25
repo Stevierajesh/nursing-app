@@ -350,7 +350,7 @@ export default function ApprovalReview() {
               <Field label="Patient" value={patient?.display_name} />
               <Field
                 label="Age · sex"
-                value={[patient?.age_band, patient?.sex].filter(Boolean).join(" · ") || null}
+                value={[patient?.age ?? patient?.age_band, patient?.sex].filter(Boolean).join(" · ") || null}
               />
               <Field label="Room" value={room ? `Room ${room}` : null} />
               <Field

@@ -151,7 +151,13 @@ export default function UnitMap() {
         {(error || patientsError) && <ErrorNote>{error || patientsError}</ErrorNote>}
         {unitBeds.length === 0 && <p className="p-2 text-sm text-ink-400">No beds configured for this unit.{canEdit ? " Open the bed editor to add rooms." : ""}</p>}
       </div>
-      {(selected || editing) && <section aria-label="Room details and bed editor" className="absolute bottom-28 left-4 right-20 z-10 max-h-[min(55dvh,36rem)] space-y-3 overflow-y-auto rounded-2xl border border-white/70 bg-white/90 p-3 shadow-xl backdrop-blur-md sm:left-auto sm:w-96">
+      {/* `bottom-28` clears the nurse's bottom pill. At `desk` the pill is gone
+          -- the nav is a sidebar -- so the panel drops to the bottom edge and
+          is allowed to grow instead of scrolling inside itself over empty map.
+          It tracks the shell's breakpoint, not `lg`: on a tablet the pill is
+          still there and still needs clearing.
+          `right-20` stays at every width: that one clears the zoom controls. */}
+      {(selected || editing) && <section aria-label="Room details and bed editor" className="absolute bottom-28 left-4 right-20 z-10 max-h-[min(55dvh,36rem)] space-y-3 overflow-y-auto rounded-2xl border border-white/70 bg-white/90 p-3 shadow-xl backdrop-blur-md sm:left-auto sm:w-96 desk:bottom-4 desk:max-h-[calc(100dvh-9rem)]">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-ink-400">{editing ? "Bed editor" : "Room details"}</span>
           <button aria-label="Close map details" className="min-h-11 px-3 text-sm text-accent" onClick={() => { setSelectedId(""); setEditing(false); }}>Close</button>

@@ -169,7 +169,10 @@ export default function WorryTap({
   // ---- confirmation state ------------------------------------------------
   if (result) {
     return (
-      <div className="flex flex-col gap-5 p-4">
+      // Capped: the outcome is a short verdict and a six-line breakdown, and
+      // reading it across the full desktop measure is worse than reading it in
+      // a column the width of the card it arrived in.
+      <div className="flex max-w-3xl flex-col gap-5 p-4">
         <div
           className={`rounded-2xl border p-5 ${
             result.escalated
@@ -253,17 +256,17 @@ export default function WorryTap({
   // ---- capture state -----------------------------------------------------
   return (
     /*
-     * Embedded, this splits in two on a wide screen: context on the left, the
-     * tap on the right. Side by side the whole capture clears a laptop
-     * viewport, which stacked it does not. Standalone stays one column -- the
-     * two nested groups render the same as the old flat list.
+     * Splits in two on a wide screen: context on the left, the tap on the
+     * right. Side by side the whole capture clears a laptop viewport, which
+     * stacked it does not -- standalone at 1512px the vitals alone filled the
+     * fold and "How worried are you?" needed a scroll to reach, on the one
+     * screen whose entire purpose is that question.
+     *
+     * Below lg both forms are a single column, and the two nested groups
+     * render the same as the old flat list.
      */
     <div
-      className={
-        embedded
-          ? "grid gap-6 lg:grid-cols-2 lg:items-stretch"
-          : "flex flex-col gap-5 p-4"
-      }
+      className={`grid gap-6 lg:grid-cols-2 lg:items-stretch ${embedded ? "" : "p-4"}`}
     >
       <div className="flex min-w-0 flex-col gap-5">
         {embedded && header}

@@ -20,6 +20,25 @@
  * page-by-page pass finishes; rename to canvas/surface/line/muted/ink then.
  */
 
+/*
+ * `desk` is the sidebar breakpoint, and it is deliberately not `lg`.
+ *
+ * Width alone cannot tell a tablet from a laptop: an iPad in landscape is
+ * exactly 1024px, which is `lg`, and the 12.9" Pro is 1366px -- wider than
+ * plenty of laptops. Gating the shell on width alone put a desktop sidebar on
+ * the iPad, where the bottom pill is the point: it sits under the thumb of
+ * someone holding the thing.
+ *
+ * `pointer: fine` is the honest discriminator. iPadOS reports `coarse` as the
+ * primary pointer even with a Magic Keyboard attached; a laptop reports `fine`
+ * even when its screen is a touchscreen.
+ *
+ * This gates CHROME only -- nav, brand bar, content measure. Multi-column
+ * layouts inside a screen stay on plain `lg:`, because whether two columns fit
+ * is a question about width and nothing else, and the tablet has the width.
+ */
+@custom-variant desk (@media (min-width: 64rem) and (pointer: fine));
+
 @theme {
   --font-brand: "Bree Serif", Georgia, serif;
   --color-ink-900: #f3f6f8;
