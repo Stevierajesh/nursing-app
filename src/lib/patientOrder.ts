@@ -1,3 +1,4 @@
+import { comparePatientPriority } from "./risk";
 import type { Patient } from "./types";
 
 export type PatientSort = "risk" | "worry" | "bed" | "alphabetical" | "criticality" | "emergency";
@@ -31,9 +32,9 @@ function emergencyUnitRank(p: Patient, units: UnitNames): number {
 export function sortPatients(patients: Patient[], sort: PatientSort, units: UnitNames = {}): Patient[] {
   return [...patients].sort((a, b) => {
     if (sort === "alphabetical") return natural.compare(a.display_name, b.display_name) || bedOrder(a, b);
-    if (sort === "criticality") return escalationRank(a) - escalationRank(b) || b.risk_score - a.risk_score || bedOrder(a, b);
+    if (sort === "criticality") return escalationRank(a) - escalationRank(b) || comparePatientPriority(a, b) || bedOrder(a, b);
     if (sort === "emergency") return emergencyUnitRank(a, units) - emergencyUnitRank(b, units) || b.risk_score - a.risk_score || bedOrder(a, b);
-    if (sort === "risk") return b.risk_score - a.risk_score || bedOrder(a, b);
+    if (sort === "risk") return comparePatientPriority(a, b) || bedOrder(a, b);
     if (sort === "worry") return (b.latest_worry?.level ?? -1) - (a.latest_worry?.level ?? -1) || b.risk_score - a.risk_score || bedOrder(a, b);
     return bedOrder(a, b);
   });

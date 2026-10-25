@@ -1,24 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import DoctorAlerts from "./DoctorAlerts";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { usePatients } from "../lib/patients";
 import { patientLocation, sortPatients } from "../lib/patientOrder";
-import {
-  CONDITIONS,
-  UNREVIEWED_PREFIX,
-  type MedicationClass,
-  type MedicationReview,
-  type Prescriber,
-  type ReviewCondition,
-} from "../lib/mobileTypes";
-import type { Vitals } from "../lib/types";
-import {
-  Button,
-  Card,
-  ErrorNote,
-  Spinner,
-  timeAgo,
-} from "../components/Primitives";
+import { patientPriority, riskBand, riskOutOfTen } from "../lib/risk";
+import { CONDITIONS, UNREVIEWED_PREFIX, type MedicationClass, type Prescriber, type ReviewCondition } from "../lib/mobileTypes";
+import type { Vitals, Patient } from "../lib/types";
+import { Button, Card, ErrorNote, Spinner, timeAgo } from "../components/Primitives";
 
 function reading(
   v: Partial<Vitals> | null | undefined,
@@ -37,390 +26,121 @@ function reading(
     : "No heart rate recorded";
 }
 
-export default function Medication() {
+export default function Medication({ nurseView = false }: { nurseView?: boolean }) {
   const { me } = useAuth();
-  const {
-    patients,
-    loading: patientsLoading,
-    error: patientsError,
-  } = usePatients();
-  const [reviews, setReviews] = useState<MedicationReview[]>([]);
+  return me?.user.role === "prescriber" && !nurseView ? <DoctorAlerts /> : <NurseMedication />;
+}
+
+const INPUT = "mt-1 min-h-11 w-full rounded-xl border border-ink-600 bg-ink-800 px-3 py-2 text-sm";
+
+function NurseMedication() {
+  const { me } = useAuth();
+  const canRequest = me?.user.role !== "prescriber";
+  const { patients, loading: patientsLoading, error: patientsError } = usePatients();
+  const [condition, setCondition] = useState<ReviewCondition>("blood_pressure");
   const [prescribers, setPrescribers] = useState<Prescriber[]>([]);
   const [classes, setClasses] = useState<MedicationClass[]>([]);
-  const [condition, setCondition] = useState<ReviewCondition>("blood_pressure");
-  const [classId, setClassId] = useState("");
-  const [patientId, setPatientId] = useState("");
-  const [prescriberId, setPrescriberId] = useState("");
-  const [note, setNote] = useState("");
-  const [responseNotes, setResponseNotes] = useState<Record<string, string>>(
-    {},
-  );
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const [sent, setSent] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const isPrescriber = me?.user.role === "prescriber";
+  const [error, setError] = useState("");
   const load = useCallback(async () => {
     try {
-      const [r, p, c] = await Promise.all([
-        api.get<{ reviews: MedicationReview[] }>("/api/v1/medication/reviews"),
-        api.get<{ prescribers: Prescriber[] }>(
-          "/api/v1/medication/prescribers",
-        ),
+      const [p, c] = await Promise.all([
+        api.get<{ prescribers: Prescriber[] }>("/api/v1/medication/prescribers"),
         api.get<{ classes: MedicationClass[] }>("/api/v1/medication/classes"),
       ]);
-      setReviews(r.reviews);
-      setPrescribers(p.prescribers);
-      setClasses(c.classes);
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Could not load medication reviews",
-      );
-    } finally {
-      setLoading(false);
-    }
+      setPrescribers(p.prescribers); setClasses(c.classes); setError("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not load medication options"); }
+    finally { setLoading(false); }
   }, []);
   useEffect(() => {
     void load();
     const timer = setInterval(() => void load(), 30000);
     return () => clearInterval(timer);
   }, [load]);
-  const patient =
-    patients.find((p) => p.id === patientId) ??
-    sortPatients(patients, "risk")[0];
-  const recipient =
-    prescribers.find((p) => p.id === prescriberId) ?? prescribers[0];
-  const conditionClasses = classes.filter((c) => c.condition === condition);
-  const unreviewedVocabulary = conditionClasses.some((c) =>
-    (c.source ?? "").startsWith(UNREVIEWED_PREFIX),
-  );
-  async function send() {
-    if (!patient || !recipient || !note.trim() || busy) return;
-    setBusy(true);
-    setError(null);
-    setMessage("");
+  const keyFor = (p: Patient) => `${condition}:${p.id}:${p.latest_vitals?.id ?? "none"}`;
+  const visible = sortPatients(patients, "risk").filter(p => !dismissed.includes(keyFor(p)));
+  if (loading || patientsLoading) return <Spinner label="Loading medication patients" />;
+  return <div className="space-y-5 p-4">
+    <p className="text-sm text-ink-400">Patient readings by condition</p>
+    {(error || patientsError) && <ErrorNote>{error || patientsError}</ErrorNote>}
+    <div role="group" aria-label="Medication condition" className="flex flex-wrap gap-2">
+      {(Object.keys(CONDITIONS) as ReviewCondition[]).map(c => <button key={c} type="button" aria-pressed={condition === c} onClick={() => setCondition(c)} className={`min-h-11 rounded-full border px-4 text-sm font-semibold transition ${condition === c ? "border-accent bg-accent text-white" : "border-ink-600 bg-transparent text-ink-400 hover:border-accent"}`}>{CONDITIONS[c]}</button>)}
+    </div>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h2 className="text-sm font-semibold text-ink-400">{CONDITIONS[condition]} · {visible.length} patient{visible.length === 1 ? "" : "s"}</h2>
+      {dismissed.length > 0 && <button type="button" onClick={() => setDismissed([])} className="min-h-11 text-xs font-semibold text-accent">Show dismissed patients</button>}
+    </div>
+    {!visible.length && <Card>{patients.length ? "No patients to show for this view." : "No patients on your active list."}</Card>}
+    <div className="grid items-start gap-4 md:grid-cols-2">
+      {visible.map(patient => <MedicationPatientCard key={`${condition}:${patient.id}`} patient={patient} condition={condition} canRequest={canRequest} classes={classes.filter(c => c.condition === condition)} prescribers={prescribers} sentTo={sent[`${condition}:${patient.id}`]} onSent={name => setSent(previous => ({ ...previous, [`${condition}:${patient.id}`]: name }))} onDismiss={() => setDismissed(previous => [...previous, keyFor(patient)])} />)}
+    </div>
+    <p className="text-xs leading-5 text-ink-400">For prescriber review. A prescriber decides treatment; sending a concern does not place a medication order.</p>
+  </div>;
+}
+
+function MedicationPatientCard({ patient, condition, canRequest, classes, prescribers, sentTo, onSent, onDismiss }: {
+  patient: Patient;
+  condition: ReviewCondition;
+  classes: MedicationClass[];
+  canRequest: boolean;
+  prescribers: Prescriber[];
+  sentTo?: string;
+  onSent: (name: string) => void;
+  onDismiss: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [prescriberId, setPrescriberId] = useState("");
+  const [classId, setClassId] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const recipient = prescribers.find(p => p.id === prescriberId) ?? prescribers[0];
+  const score = riskOutOfTen(patient.risk_score);
+  const band = riskBand(patient.risk_score);
+  const priority = patientPriority(patient);
+  async function send(event: FormEvent) {
+    event.preventDefault();
+    if (busy || !canRequest || !recipient || !note.trim()) return;
+    setBusy(true); setError("");
     try {
-      await api.post("/api/v1/medication/reviews", {
-        patient_id: patient.id,
-        prescriber_id: recipient.id,
-        condition,
-        request_note: note.trim(),
-        suggested_class_id: classId || null,
-      });
-      setNote("");
-      setClassId("");
-      await load();
-      setMessage(`Review request sent to ${recipient.full_name}.`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not send request");
-    } finally {
-      setBusy(false);
-    }
+      await api.post("/api/v1/medication/reviews", { patient_id: patient.id, prescriber_id: recipient.id, condition, request_note: note.trim(), suggested_class_id: classId || null });
+      onSent(recipient.full_name); setExpanded(false); setNote(""); setClassId("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not send concern"); }
+    finally { setBusy(false); }
   }
-  async function act(id: string, action: "review" | "dismiss") {
-    const response = responseNotes[id]?.trim();
-    if (!response || busy) return;
-    setBusy(true);
-    setError(null);
-    setMessage("");
-    try {
-      await api.patch(`/api/v1/medication/reviews/${id}`, {
-        action,
-        note: response,
-      });
-      await load();
-      setMessage(
-        action === "review"
-          ? "Physician review recorded."
-          : "Request dismissed.",
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not update review");
-    } finally {
-      setBusy(false);
-    }
-  }
-  if (loading || patientsLoading)
-    return <Spinner label="Loading medication review" />;
-  return (
-    <div className="space-y-5 p-4">
-      <h1 className="text-4xl font-extrabold tracking-tight">Medication</h1>
-      <p className="text-sm text-ink-400">
-        {isPrescriber
-          ? "Your physician review queue"
-          : "Request a medication review from a physician"}
-      </p>
-      {(error || patientsError) && (
-        <ErrorNote>{error || patientsError}</ErrorNote>
-      )}
-      {message && (
-        <p role="status" className="text-sm text-calm">
-          {message}
-        </p>
-      )}
-      {/* Two columns only when there is a request form to put beside the queue.
-          A physician has no form, so their queue keeps the full width. */}
-      <div
-        className={
-          isPrescriber
-            ? "space-y-5"
-            : "space-y-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0"
-        }
-      >
-        <div className="space-y-5">
-          {!isPrescriber && (
-            <>
-              <div
-                role="group"
-                aria-label="Review condition"
-                className="grid grid-cols-3 gap-2"
-              >
-                {(Object.keys(CONDITIONS) as ReviewCondition[]).map((c) => (
-                  <button
-                    key={c}
-                    aria-pressed={c === condition}
-                    onClick={() => {
-                      setCondition(c);
-                      // The vocabulary is per-condition, so a class chosen for
-                      // the old one would be rejected by the API's pairing check.
-                      setClassId("");
-                      setMessage("");
-                    }}
-                    className={`min-h-14 rounded-full border px-2 text-sm font-semibold transition ${condition === c ? "border-accent bg-accent text-white" : "border-ink-600 bg-ink-800 text-ink-200"}`}
-                  >
-                    {CONDITIONS[c]}
-                  </button>
-                ))}
-              </div>
-              <Card className="space-y-4">
-                <h2 className="font-semibold">For physician review</h2>
-                {patients.length === 0 ? (
-                  <p>No patients on your active list.</p>
-                ) : (
-                  <>
-                    <label className="block text-sm">
-                      Patient
-                      <select
-                        aria-label="Medication patient"
-                        value={patient?.id ?? ""}
-                        onChange={(e) => {
-                          setPatientId(e.target.value);
-                          setNote("");
-                        }}
-                        className="mt-2 min-h-12 w-full rounded-xl border border-ink-600 bg-ink-900 px-3"
-                      >
-                        {sortPatients(patients, "risk").map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.display_name} · {patientLocation(p)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="rounded-xl bg-ink-900 p-3">
-                      <p className="font-semibold">
-                        {reading(patient?.latest_vitals, condition)}
-                      </p>
-                      <p className="mt-1 text-xs text-ink-400">
-                        {patient?.latest_vitals
-                          ? `Recorded ${timeAgo(patient.latest_vitals.recorded_at)}`
-                          : "A review request can still be sent with your observations."}
-                      </p>
-                    </div>
-                    {/* The nurse suggests a class; the app does not recommend
-                        one. Optional, and deselectable -- a request that just
-                        says "look at this" is still worth sending. */}
-                    {conditionClasses.length > 0 && (
-                      <div>
-                        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-400">
-                          Suggested class{" "}
-                          <span className="font-normal normal-case text-ink-400">
-                            optional
-                          </span>
-                        </h3>
-                        <div
-                          role="group"
-                          aria-label="Suggested medication class"
-                          className="flex flex-wrap gap-2"
-                        >
-                          {conditionClasses.map((c) => {
-                            const on = classId === c.id;
-                            return (
-                              <button
-                                key={c.id}
-                                onClick={() => setClassId(on ? "" : c.id)}
-                                aria-pressed={on}
-                                className={`min-h-11 rounded-full border px-4 text-sm font-medium transition ${
-                                  on
-                                    ? "border-accent bg-accent text-white"
-                                    : "border-ink-600 bg-ink-800 text-ink-200"
-                                }`}
-                              >
-                                {c.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {unreviewedVocabulary && (
-                          <p className="mt-2 text-xs leading-relaxed text-slight">
-                            This list has not been clinically reviewed for this
-                            unit. A physician decides the medication.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    <label className="block text-sm">
-                      Physician
-                      <select
-                        aria-label="Physician"
-                        value={recipient?.id ?? ""}
-                        onChange={(e) => setPrescriberId(e.target.value)}
-                        className="mt-2 min-h-12 w-full rounded-xl border border-ink-600 bg-ink-900 px-3"
-                      >
-                        {prescribers.length === 0 ? (
-                          <option value="">No physician configured</option>
-                        ) : (
-                          prescribers.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.full_name}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                    </label>
-                    {prescribers.length === 0 && (
-                      <p className="text-xs text-slight">
-                        An administrator must configure a physician account
-                        before requests can be sent.
-                      </p>
-                    )}
-                    <label className="block text-sm">
-                      Reason for review
-                      <textarea
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        maxLength={2000}
-                        rows={3}
-                        className="mt-2 w-full rounded-xl border border-ink-600 bg-ink-900 p-3"
-                        placeholder="Describe your concern and the medication question."
-                      />
-                    </label>
-                    <Button
-                      disabled={busy || !recipient || !note.trim()}
-                      onClick={() => void send()}
-                      className="w-full"
-                    >
-                      {busy ? "Saving…" : "Send to physician"}
-                    </Button>
-                  </>
-                )}
-              </Card>
-            </>
-          )}
-          <p className="text-xs leading-5 text-ink-400">
-            Review requests are delivered to the physician’s in-app queue. A
-            recorded review is not a medication order.
-          </p>
-        </div>
-        <section aria-label="Medication review requests" className="space-y-3">
-          <h2 className="text-lg font-semibold">
-            {isPrescriber ? "Requests assigned to you" : "Review requests"}
-          </h2>
-          {reviews.length === 0 && <Card>No medication review requests.</Card>}
-          {reviews.map((r) => {
-            const p = patients.find((p) => p.id === r.patient_id);
-            return (
-              <Card key={r.id} className="space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="font-semibold">
-                    {p?.display_name ??
-                      r.patient?.display_name ??
-                      "Patient review"}
-                  </h3>
-                  {/* Dismissed must not share the green the mockups use for an
-                      approved review -- on a pale badge the colour is the whole
-                      signal, and "dismissed in green" reads as "actioned". */}
-                  <span
-                    className={`rounded-full px-2 py-1 text-xs font-semibold ${r.status === "pending" ? "bg-slight/15 text-slight" : r.status === "reviewed" ? "bg-calm/15 text-calm" : "bg-ink-700 text-ink-400"}`}
-                  >
-                    {r.status}
-                  </span>
-                </div>
-                <p className="text-sm text-ink-200">
-                  {CONDITIONS[r.condition]} ·{" "}
-                  {reading(r.vitals_snapshot, r.condition)}
-                </p>
-                {r.suggested_class && (
-                  // Attributed to the nurse, not the system -- the same list
-                  // under "options often considered" would read as advice.
-                  <p className="text-sm">
-                    <span className="text-ink-400">Nurse suggested: </span>
-                    <span className="font-semibold">
-                      {r.suggested_class.label}
-                    </span>
-                  </p>
-                )}
-                <p className="whitespace-pre-wrap break-words text-sm">
-                  {r.request_note}
-                </p>
-                <p className="text-xs text-ink-400">
-                  To{" "}
-                  {prescribers.find((p) => p.id === r.prescriber_id)?.full_name ??
-                    "assigned physician"}{" "}
-                  · {timeAgo(r.created_at)}
-                </p>
-                {r.review_note && (
-                  <div className="rounded-xl bg-ink-900 p-3 text-sm">
-                    <p className="mb-1 text-xs text-ink-400">
-                      {r.status === "reviewed"
-                        ? "Physician response"
-                        : "Dismissal reason"}
-                    </p>
-                    <p className="whitespace-pre-wrap break-words">
-                      {r.review_note}
-                    </p>
-                  </div>
-                )}
-                {r.status === "pending" && (
-                  <>
-                    <label className="block text-sm">
-                      {isPrescriber ? "Review response" : "Dismissal reason"}
-                      <textarea
-                        value={responseNotes[r.id] ?? ""}
-                        onChange={(e) =>
-                          setResponseNotes((prev) => ({
-                            ...prev,
-                            [r.id]: e.target.value,
-                          }))
-                        }
-                        maxLength={2000}
-                        rows={2}
-                        className="mt-2 w-full rounded-xl border border-ink-600 bg-ink-900 p-3"
-                      />
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {isPrescriber && (
-                        <Button
-                          disabled={busy || !responseNotes[r.id]?.trim()}
-                          onClick={() => void act(r.id, "review")}
-                        >
-                          Complete review
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        disabled={busy || !responseNotes[r.id]?.trim()}
-                        onClick={() => void act(r.id, "dismiss")}
-                      >
-                        Dismiss
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </Card>
-            );
-          })}
-        </section>
+  return <Card className="rounded-3xl">
+    <div className="flex items-start gap-3">
+      <div className={`w-11 shrink-0 text-center ${band.text}`} aria-label={`Combined risk ${score} out of 10`}>
+        <div className="flex h-7 items-end justify-center gap-0.5" aria-hidden="true">{Array.from({ length: 10 }, (_, index) => <span key={index} className={`w-0.5 rounded-t-sm ${index < score ? "bg-current" : "bg-ink-600"}`} style={{ height: `${6 + index * 2}px` }} />)}</div>
+        <span aria-hidden="true" className="mt-1 block text-[11px] font-bold">{score}/10</span>
+      </div>
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold">{patient.bed ? `Bed ${patient.bed}` : patient.display_name} · {reading(patient.latest_vitals, condition)}</h3>
+        <p className="mt-1 text-xs text-ink-400">{patient.bed ? `${patient.display_name} · ` : ""}{patientLocation(patient)}</p>
+        <p className={`mt-1 text-xs ${priority.band.text}`}>Risk {score}/10 · {priority.label}</p>
       </div>
     </div>
-  );
+    <div className="mt-4 rounded-2xl border border-accent/40 bg-accent/5 p-3">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-accent">For prescriber review</p>
+      <p className="mt-2 text-sm">{CONDITIONS[condition]}: {reading(patient.latest_vitals, condition)}</p>
+      <p className="mt-1 text-xs leading-5 text-ink-400">{patient.latest_vitals ? `Observed ${timeAgo(patient.latest_vitals.recorded_at)}. ` : ""}Send your concern and optionally suggest a medication class for the prescriber to review.</p>
+    </div>
+    {sentTo && <p role="status" className="mt-3 text-xs font-medium text-calm">Concern sent to {sentTo}.</p>}
+    {error && <div className="mt-3"><ErrorNote>{error}</ErrorNote></div>}
+    {expanded ? <form onSubmit={send} className="mt-4">
+      <fieldset disabled={busy} className="space-y-3">
+        <label className="block text-sm">Prescriber<select required value={recipient?.id ?? ""} onChange={e => setPrescriberId(e.target.value)} className={INPUT}>{!prescribers.length && <option value="">No prescriber configured</option>}{prescribers.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select></label>
+        {classes.length > 0 && <label className="block text-sm">Suggested class (optional)<select value={classId} onChange={e => setClassId(e.target.value)} className={INPUT}><option value="">No class suggested</option>{classes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>}
+        {classes.some(c => (c.source ?? "").startsWith(UNREVIEWED_PREFIX)) && <p className="text-xs text-slight">This class list has not been clinically reviewed for this unit. The prescriber decides treatment.</p>}
+        <label className="block text-sm">Your concern<textarea required maxLength={2000} rows={3} value={note} onChange={e => setNote(e.target.value)} placeholder="Describe your concern and medication question." className={INPUT} /></label>
+        <div className="flex gap-2"><Button type="submit" className="flex-1 rounded-full" disabled={!recipient || !note.trim()}>{busy ? "Sending…" : "Send to prescriber"}</Button><Button type="button" variant="ghost" className="rounded-full" onClick={() => setExpanded(false)}>Cancel</Button></div>
+      </fieldset>
+    </form> : <div className="mt-3 flex gap-2">
+      <Button type="button" className="flex-1 rounded-full" disabled={!canRequest || !prescribers.length} onClick={() => setExpanded(true)}>Send to prescriber</Button>
+      <Button type="button" variant="ghost" className="rounded-full" onClick={onDismiss}>Dismiss</Button>
+    </div>}
+    {!prescribers.length && <p className="mt-2 text-xs text-slight">An administrator needs to add a prescriber before concerns can be sent.</p>}
+  </Card>;
 }

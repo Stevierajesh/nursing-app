@@ -65,9 +65,31 @@ export interface Vitals {
   systolic_bp: number | null;
   diastolic_bp: number | null;
   temperature_c: number | null;
+  /** Numeric rating scale 0-10. Not a NEWS2 parameter; banded separately. */
+  pain_score: number | null;
   supplemental_o2: boolean;
   consciousness: string | null;
   news_score: number | null;
+}
+
+/**
+ * Per-parameter band for one observation, computed by the backend.
+ *
+ * Keyed by the vitals column. A parameter with no entry was either not
+ * charted or is not scored -- render it without a badge rather than guessing,
+ * and never reconstruct these thresholds in TypeScript.
+ */
+export type VitalBands = Record<
+  string,
+  { points?: number; label: "normal" | "watch" | "elevated" | "high"; direction: "normal" | "high" | "low" }
+>;
+
+export interface NurseNote {
+  id: string;
+  patient_id: string;
+  body: string;
+  recorded_at: string;
+  author?: { full_name: string } | null;
 }
 
 export interface WorrySignal {
@@ -102,7 +124,14 @@ export interface Escalation {
   assessed_at: string | null;
 }
 
+export interface NewsAlert {
+  score: number | null;
+  band: "unknown" | "none" | "low" | "single_red" | "medium" | "high";
+  single_red_parameters: string[];
+}
+
 export interface Patient {
+  news_alert?: NewsAlert;
   is_simulated?: boolean;
   health_context?: string | null;
   /** Free text working diagnosis, not a coded term. */
@@ -124,6 +153,11 @@ export interface Patient {
   race_code: string | null;
   primary_language: string | null;
   admitted_at: string;
+  /** All four are null when not recorded. Never render null as "none". */
+  past_history?: string | null;
+  home_medications?: string | null;
+  prior_admissions?: string | null;
+  past_responses?: string | null;
   risk_score: number;
   risk_components: { worry: number; vitals: number; trend: number } | null;
   risk_inputs: Record<string, unknown> | null;
@@ -152,8 +186,12 @@ export interface WorryResponse {
 }
 
 export interface PatientDetail {
+  risk_history?: { score: number; computed_at: string }[];
+  news_alert?: NewsAlert;
   patient: Patient;
   vitals: Vitals[];
+  vital_bands: VitalBands;
+  nurse_notes: NurseNote[];
   worry_signals: WorrySignal[];
   escalations: Escalation[];
   risk: {

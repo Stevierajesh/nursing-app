@@ -5,10 +5,11 @@ import { usePatients } from "../lib/patients";
 import type { Patient } from "../lib/types";
 import { Button, ErrorNote } from "./Primitives";
 
-export default function EscalationActions({ patient }: { patient: Patient }) {
+export default function EscalationActions({ patient, compact = false }: { patient: Patient; compact?: boolean }) {
   const { me } = useAuth();
   const { refresh } = usePatients();
   const [busy, setBusy] = useState(false);
+  const [assessing, setAssessing] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const escalation = patient.open_escalation;
@@ -46,6 +47,22 @@ export default function EscalationActions({ patient }: { patient: Patient }) {
     : escalation.status === "auto_escalated"
       ? "Overdue escalation"
       : "Awaiting response";
+
+  if (compact) return <div className="mt-4 space-y-3">
+    {error && <ErrorNote>{error}</ErrorNote>}
+    <div className="grid grid-cols-2 gap-2">
+      {!escalation.acknowledged_at ? <>
+        <Button className="rounded-full! px-3 text-xs" disabled={busy} onClick={() => void act("acknowledge")}>{busy ? "Saving…" : "Acknowledge"}</Button>
+        <Button variant="ghost" className="rounded-full! px-3 text-xs" disabled={busy} aria-expanded={assessing} onClick={() => setAssessing(!assessing)}>Record assessment</Button>
+      </> : <Button className="col-span-2 rounded-full! px-3 text-xs" disabled={busy} aria-expanded={assessing} onClick={() => setAssessing(!assessing)}>Record assessment</Button>}
+    </div>
+    {assessing && <div className="space-y-3 rounded-2xl border border-ink-600/60 bg-white/70 p-3">
+      <label className="block text-xs font-medium text-ink-400">Assessment note (optional)
+        <textarea aria-label={`Assessment note for ${patient.display_name}`} value={note} onChange={event => setNote(event.target.value)} maxLength={2000} rows={2} className="mt-2 w-full rounded-xl border border-ink-600 bg-white p-3 text-sm" />
+      </label>
+      <Button disabled={busy} className="w-full rounded-full! text-xs" onClick={() => void act("assess")}>{busy ? "Saving…" : "Mark assessed"}</Button>
+    </div>}
+  </div>;
 
   return (
     <div

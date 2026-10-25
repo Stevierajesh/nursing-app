@@ -1,4 +1,6 @@
+import AppHeader from "../components/AppHeader";
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { Button, ErrorNote } from "../components/Primitives";
 
@@ -24,6 +26,7 @@ function initials(name: string): string {
 
 export default function Login() {
   const { signIn, error } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,6 +37,7 @@ export default function Login() {
     setBusy(true);
     try {
       await signIn(email, password);
+      navigate("/", { replace: true });
     } catch {
       // surfaced via the auth context's error
     } finally {
@@ -48,29 +52,19 @@ export default function Login() {
 
   return (
     <div className="relative flex min-h-full flex-col">
+      <AppHeader />
       {/* Decorative teal wash, kept out of the a11y tree. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-[radial-gradient(80%_70%_at_50%_0%,rgba(15,107,107,0.16),transparent_72%)]"
+        className="pointer-events-none absolute inset-x-0 top-[69px] h-80 bg-[radial-gradient(80%_70%_at_50%_0%,rgba(15,107,107,0.16),transparent_72%)]"
       />
 
       {/* m-auto centres in the viewport when there is room and lets the page
           grow and scroll when there is not -- a fixed height would clip the
           Sign in button on a short window. */}
       <div className="relative m-auto w-full max-w-md px-6 py-10">
-        <div className="flex items-center justify-center gap-2.5">
-          {/* Wordmark only until the mark is decided; the bars read as the
-              risk glyph used throughout the app. */}
-          <span className="flex items-end gap-0.5" aria-hidden>
-            <span className="h-2.5 w-1 rounded-sm bg-accent/40" />
-            <span className="h-4 w-1 rounded-sm bg-accent/70" />
-            <span className="h-5.5 w-1 rounded-sm bg-accent" />
-          </span>
-          <span className="text-lg font-extrabold tracking-tight">Salus</span>
-        </div>
-
         <div className="mt-7 rounded-3xl border border-ink-700 bg-ink-800 p-6 shadow-xl shadow-ink-200/5">
-          <h1 className="text-2xl font-bold tracking-tight">Sign in</h1>
+          <h2 className="text-2xl font-bold tracking-tight">Sign in</h2>
           <p className="mt-1 text-sm text-ink-400">
             Pick a demo nurse, or use your own account.
           </p>

@@ -26,11 +26,9 @@ export default function Toasts() {
   if (shown.length === 0) return null;
 
   return (
-    // Sits above the bottom nav rather than over the top of the screen: on a
-    // phone this is where a thumb already is. The container ignores pointer
-    // events so the page stays usable around the stack.
+    // Keep the stack at the top; pointer events pass through between notices.
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-30 mx-auto flex w-full max-w-md flex-col gap-2.5 px-4"
+      className="pointer-events-none fixed inset-x-0 top-[calc(1rem+env(safe-area-inset-top))] max-h-[calc(100dvh-2rem-env(safe-area-inset-top))] overflow-y-auto z-30 mx-auto flex w-full max-w-md flex-col gap-2.5 px-4"
       aria-live="polite"
     >
       {shown.map((n) => {

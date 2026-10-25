@@ -1,5 +1,5 @@
 import type { Patient } from "./types";
-import { RISK_BANDS, riskBand, riskOutOfTen } from "./risk";
+import { patientPriority, riskOutOfTen } from "./risk";
 
 /**
  * Turns two successive `/patients/mine` snapshots into the things worth
@@ -25,8 +25,6 @@ export interface EscalationEvent {
   body: string;
 }
 
-const bandIndex = (score: number) =>
-  RISK_BANDS.findIndex((b) => b.label === riskBand(score).label);
 
 export function snapshot(patients: Patient[]): Map<string, PatientSnapshot> {
   return new Map(
@@ -35,7 +33,7 @@ export function snapshot(patients: Patient[]): Map<string, PatientSnapshot> {
       {
         escalationId: p.open_escalation?.id ?? null,
         escalationStatus: p.open_escalation?.status ?? null,
-        bandIndex: bandIndex(p.risk_score),
+        bandIndex: patientPriority(p).rank,
       },
     ]),
   );
@@ -64,7 +62,7 @@ export function escalationEvents(
     const now = {
       escalationId: p.open_escalation?.id ?? null,
       escalationStatus: p.open_escalation?.status ?? null,
-      bandIndex: bandIndex(p.risk_score),
+      bandIndex: patientPriority(p).rank,
     };
 
     if (
@@ -84,20 +82,20 @@ export function escalationEvents(
         patientId: p.id,
         severity: "warning",
         title: `${where(p)} — escalation opened`,
-        body: `${p.display_name} · risk ${riskOutOfTen(p.risk_score)}/10. Acknowledge when you have seen it.`,
+        body: `${p.display_name} · Combined score ${riskOutOfTen(p.risk_score)}/10. Acknowledge when you have seen it.`,
       });
     }
 
     // Only upward band moves. A score settling back down is good news and does
     // not need to take over the screen.
     if (now.bandIndex > before.bandIndex) {
-      const band = riskBand(p.risk_score);
+      const priority = patientPriority(p);
       events.push({
-        id: `band:${p.id}:${band.label}:${riskOutOfTen(p.risk_score)}`,
+        id: `priority:${p.id}:${priority.rank}:${priority.label}`,
         patientId: p.id,
-        severity: band.label === "High" ? "critical" : "warning",
-        title: `${where(p)} — risk rose to ${riskOutOfTen(p.risk_score)}/10`,
-        body: `${p.display_name} moved into ${band.label.toLowerCase()}.`,
+        severity: priority.rank === 3 ? "critical" : "warning",
+        title: `${where(p)} — ${priority.label}`,
+        body: `${p.display_name} · ${priority.reason} · Combined score ${riskOutOfTen(p.risk_score)}/10.`,
       });
     }
   }

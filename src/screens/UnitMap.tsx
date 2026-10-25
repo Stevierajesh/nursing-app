@@ -1,13 +1,15 @@
+import ClinicalPriority from "../components/ClinicalPriority";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { usePatients } from "../lib/patients";
 import { patientLocation, sortPatients } from "../lib/patientOrder";
-import { RISK_BANDS, riskBand, riskOutOfTen, riskTone } from "../lib/risk";
+import { RISK_BANDS } from "../lib/risk";
 import { REASON_LABELS, WORRY_LABELS } from "../lib/types";
 import type { Unit, UnitBed } from "../lib/mobileTypes";
 import { Button, Card, ErrorNote, Spinner } from "../components/Primitives";
+import UnitFloorPlan from "../components/UnitFloorPlan";
 
 export default function UnitMap() {
   const { me } = useAuth();
@@ -114,125 +116,58 @@ export default function UnitMap() {
   }
   if (loading || patientsLoading) return <Spinner label="Loading unit map" />;
   return (
-    <div className="space-y-5 p-4">
-      <h1 className="text-4xl font-extrabold tracking-tight">Unit map</h1>
-      <p className="text-sm text-ink-400">
-        Rooms, bed occupancy, and patient risk
-      </p>
-      {(error || patientsError) && (
-        <ErrorNote>{error || patientsError}</ErrorNote>
-      )}
-      <label className="block text-sm text-ink-200 sm:max-w-sm">
-        Unit
+    <div className="absolute inset-0 overflow-hidden bg-white">
+      {unitBeds.length > 0 && <UnitFloorPlan
+        unitName={currentUnit?.name ?? ""}
+        beds={unitBeds}
+        patientAt={patientAt}
+        selectedId={selectedId}
+        onSelect={(bed) => { setSelectedId(bed.id); setEditing(false); }}
+      />}
+      <div className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 w-[min(20rem,calc(100%_-_2rem))] rounded-2xl border border-white/70 bg-white/70 p-2 shadow-lg shadow-ink-200/5 backdrop-blur-md">
         <select
           aria-label="Map unit"
           value={currentUnit?.id ?? ""}
           onChange={(e) => {
             setUnitId(e.target.value);
             setSelectedId("");
+            setEditing(false);
             setBedId("current");
             setMessage("");
           }}
-          className="mt-2 min-h-12 w-full rounded-xl border border-ink-600 bg-ink-800 px-3"
+          className="min-h-12 w-full rounded-xl border border-ink-600/60 bg-white/30 px-3 text-sm font-semibold"
         >
-          {units.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name}
-            </option>
-          ))}
+          {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
-      </label>
-      <div className="flex items-center justify-between gap-2 text-xs text-ink-400">
-        <span className="flex items-center gap-2">
-          {updatedAt && (
-            <span className="size-2 shrink-0 rounded-full bg-calm" aria-hidden />
-          )}
-          {updatedAt ? `Live · updated ${updatedAt}` : "No update yet"}
-        </span>
-        <button
-          onClick={() => void Promise.all([load(), refresh()])}
-          className="min-h-11 px-3 text-accent"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center justify-between gap-2 px-2 text-xs text-ink-400">
+          <span className="flex items-center gap-1.5" title={updatedAt ? `Updated ${updatedAt}` : "No update yet"}>
+            <span className="size-1.5 rounded-full bg-calm" aria-hidden />Live
+          </span>
+          <div className="flex gap-2">
+            {canEdit && <button className="min-h-11 px-2 text-accent" onClick={() => { setEditing(!editing); setMessage(""); }}>Edit beds</button>}
+            <button onClick={() => void Promise.all([load(), refresh()])} className="min-h-11 px-2 text-accent">Refresh</button>
+          </div>
+        </div>
+        {(error || patientsError) && <ErrorNote>{error || patientsError}</ErrorNote>}
+        {unitBeds.length === 0 && <p className="p-2 text-sm text-ink-400">No beds configured for this unit.{canEdit ? " Open the bed editor to add rooms." : ""}</p>}
       </div>
-      {unitBeds.length === 0 ? (
-        <Card>
-          No beds configured for this unit.
-          {canEdit ? " Open the bed editor to add rooms." : ""}
-        </Card>
-      ) : (
-        <>
-          <div className="rounded-3xl border border-ink-600 bg-ink-800 p-3">
-            <p className="mb-4 text-center text-xs uppercase tracking-widest text-ink-400">
-              {currentUnit?.name} · Unit overview
-            </p>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-              {unitBeds.map((b) => {
-                const p = patientAt(b);
-                const band = p ? riskBand(p.risk_score) : null;
-                return (
-                  <button
-                    key={b.id}
-                    aria-pressed={selectedId === b.id}
-                    onClick={() => setSelectedId(b.id)}
-                    className={`min-h-28 rounded-xl border p-2 text-center ${band ? `${band.tint} ${band.text}` : "border-ink-600 bg-ink-900 text-ink-400"} ${selectedId === b.id ? "ring-2 ring-accent" : ""}`}
-                  >
-                    <span className="block text-xs text-ink-400">
-                      Room {b.room}
-                    </span>
-                    <span className="block text-xs">Bed {b.bed}</span>
-                    {band && p ? (
-                      <>
-                        {/* Pale cell, stronger circle: the mockups use the ring
-                            of colour to carry the number across the room. */}
-                        <span
-                          className={`mx-auto mt-2 flex size-10 items-center justify-center rounded-full text-base font-bold tabular-nums text-ink-200 ${band.dot}`}
-                        >
-                          {riskOutOfTen(p.risk_score)}
-                        </span>
-                        <span className="mt-1 block text-xs font-semibold">
-                          {band.label}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="mt-2 block text-lg font-bold">
-                        {b.occupied ? "Occupied" : "Vacant"}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mt-4 rounded-xl border border-ink-600 bg-ink-900 py-3 text-center text-xs text-ink-400">
-              Nurses’ station
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {RISK_BANDS.map((b) => (
-              <span
-                key={b.label}
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${b.tint} ${b.text}`}
-              >
-                {b.range} {b.label}
-              </span>
-            ))}
-          </div>
-        </>
-      )}
+      {(selected || editing) && <section aria-label="Room details and bed editor" className="absolute bottom-28 left-4 right-20 z-10 max-h-[min(55dvh,36rem)] space-y-3 overflow-y-auto rounded-2xl border border-white/70 bg-white/90 p-3 shadow-xl backdrop-blur-md sm:left-auto sm:w-96">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-ink-400">{editing ? "Bed editor" : "Room details"}</span>
+          <button aria-label="Close map details" className="min-h-11 px-3 text-sm text-accent" onClick={() => { setSelectedId(""); setEditing(false); }}>Close</button>
+        </div>
       {selected && (
         <Card>
           <h2 className="font-semibold">
             Room {selected.room} · Bed {selected.bed}
           </h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {unitBeds.filter((bed) => bed.room === selected.room).map((bed) => <button key={bed.id} aria-pressed={bed.id === selectedId} onClick={() => setSelectedId(bed.id)} className={`min-h-11 rounded-xl border px-3 text-xs ${bed.id === selectedId ? "border-accent bg-accent/10 text-accent" : "border-ink-600"}`}>Bed {bed.bed}</button>)}
+          </div>
           {selectedPatient ? (
             <>
               <p className="mt-2">{selectedPatient.display_name}</p>
-              <p
-                className={`mt-1 font-bold ${riskTone(selectedPatient.risk_score)}`}
-              >
-                Risk {riskOutOfTen(selectedPatient.risk_score)}/10
-              </p>
+              <ClinicalPriority patient={selectedPatient} />
               <p className="mt-1 text-sm text-ink-400">
                 {selectedPatient.latest_worry
                   ? WORRY_LABELS[selectedPatient.latest_worry.level]
@@ -261,6 +196,8 @@ export default function UnitMap() {
           )}
         </Card>
       )}
+      {selected && <p className="text-xs text-ink-400">Red: unresolved escalation or NEWS high. NEWS warnings take priority over the combined score.</p>}
+      {selected && <div aria-label="Combined score legend" className="flex flex-wrap gap-1.5">{RISK_BANDS.map((band) => <span key={band.label} className={`rounded-full border px-2 py-1 text-[10px] ${band.tint} ${band.text}`}>{band.range} {band.label}</span>)}</div>}
       {canEdit && (
         <>
           <Button
@@ -368,6 +305,7 @@ export default function UnitMap() {
           )}
         </>
       )}
+      </section>}
     </div>
   );
 }

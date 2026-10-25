@@ -55,3 +55,49 @@ export function riskBand(score: number): RiskBand {
 export function riskTone(score: number): string {
   return riskBand(score).text;
 }
+
+/** Display priority is distinct from the combined model's 1–10 number.
+ * Acknowledgement does not close an escalation. Assessed/resolved records do
+ * not keep a patient red. NEWS alone can raise priority without changing risk.
+ */
+export interface PriorityInput {
+  risk_score: number;
+  latest_news?: number | null;
+  news_alert?: import("./types").NewsAlert;
+  open_escalation?: Pick<import("./types").Escalation, "status"> | null;
+}
+
+export function patientPriority(patient: PriorityInput) {
+  const combined = riskBand(patient.risk_score);
+  const status = patient.open_escalation?.status;
+  const news = patient.news_alert?.score ?? patient.latest_news;
+  const newsBand = patient.news_alert?.band ?? (news == null ? "unknown" : news >= 7 ? "high" : news >= 5 ? "medium" : news > 0 ? "low" : "none");
+  const newsLabel = news == null ? "NEWS unavailable" : `NEWS ${news} · ${newsBand === "single_red" ? "Single parameter 3" : newsBand === "medium" ? "Medium" : newsBand === "high" ? "High" : newsBand === "unknown" ? "Unavailable" : newsBand === "none" ? "Zero" : "Low"}`;
+  if (status === "open" || status === "acknowledged" || status === "auto_escalated") {
+    return { band: RISK_BANDS[3], rank: 3, label: status === "acknowledged" ? "Escalation acknowledged" : status === "auto_escalated" ? "Escalation overdue" : "Escalation open", reason: `${newsLabel} · Assessment or resolution pending` };
+  }
+  if (newsBand === "high") return { band: RISK_BANDS[3], rank: 3, label: newsLabel, reason: "NEWS high response threshold" };
+  const combinedRank = RISK_BANDS.indexOf(combined);
+  if ((newsBand === "medium" || newsBand === "single_red") && combinedRank < 3) {
+    return { band: RISK_BANDS[2], rank: 2, label: newsLabel, reason: "NEWS urgent review threshold" };
+  }
+  return { band: combined, rank: combinedRank, label: `Combined score ${combined.label.toLowerCase()}`, reason: newsLabel };
+}
+
+export function detailPriority(detail: import("./types").PatientDetail) {
+  return patientPriority({
+    risk_score: detail.risk.score,
+    latest_news: detail.risk.latest_news,
+    news_alert: detail.news_alert,
+    open_escalation: detail.escalations.find(escalation => ["open", "acknowledged", "auto_escalated"].includes(escalation.status)) ?? null,
+  });
+}
+
+/** Highest display priority first; active escalations win ties over the model. */
+export function comparePatientPriority(a: PriorityInput, b: PriorityInput): number {
+  const active = (patient: PriorityInput) => ["open", "acknowledged", "auto_escalated"].includes(patient.open_escalation?.status ?? "");
+  return patientPriority(b).rank - patientPriority(a).rank
+    || Number(active(b)) - Number(active(a))
+    || (b.news_alert?.score ?? b.latest_news ?? -1) - (a.news_alert?.score ?? a.latest_news ?? -1)
+    || b.risk_score - a.risk_score;
+}

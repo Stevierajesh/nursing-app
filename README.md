@@ -36,8 +36,8 @@ Then fill in `VITE_SUPABASE_ANON_KEY`.
 | Email | Name | Assigned patients |
 |---|---|---|
 | `maria@mercygeneral.example` | Maria Santos | Robert Ellis (412), Yolanda Price (408), Mei-Ling Chen (403) |
-| `james@mercygeneral.example` | James Okonkwo | Henry Okafor (415), Carlos Represa (410) |
-| `lin@mercygeneral.example` | Lin Zhao | Dorothy Whitfield (601), Aisha Rahman (604), Frank Delacroix (607) |
+| `lin@mercygeneral.example` | Lin Zhao | Dorothy Whitfield (601), Aisha Rahman (604), Frank Delacroix (607), Henry Okafor (415), Carlos Represa (410) |
+| `james@mercygeneral.example` | James Okonkwo | **Doctor** — no patients; signs in to the approval queue |
 
 Use **Maria** for the demo — Robert Ellis is the hero case (NEWS 4, drifting)
 and Yolanda Price is the stable counter-example.
@@ -125,25 +125,56 @@ are not changed automatically. Never re-run the destructive seed just to add a
 prescriber. Assign the role to an appropriate existing user or create a user
 through the admin API.
 
+In the live demo org, **James Okonkwo (`james@mercygeneral.example`) is the
+prescriber** — promoted from nurse, with his two patients reassigned to Lin
+Zhao first so neither was left uncovered.
+
 ## Migration status
 
-Backend code and migrations are updated locally. New migrations are:
+**All 15 migrations are applied to the live Supabase database**, through
+`20261024001500_continuous_simulation.sql`, and all 15 are recorded in `_migrations`.
 
 - 007: five worry levels and historical Very worried preservation.
 - 008: patient bed identifiers.
 - 009: prescriber role (must commit before migration 010).
 - 010: unit bed inventory, demo bed population, unique active bed occupancy,
   glucose observations, medication reviews, and RLS policies.
+- 011: patient simulation runs.
+- 012: diagnosis, allergies, and the medication-class vocabulary.
+- 013: doctor mode — nurse notes, patient history, pain score, and the
+  medication approval states and escalation clock.
+- 014: "request more info from nurse" on the approval review.
+- 015: continuous simulation — runs no longer self-complete at their duration.
 
-None of migrations 007–010 have been applied to the live Supabase database
-by this work. Apply those pending files in order, then deploy/restart the API
-and clients. Do not re-run the initial migrations or reset demo data. Migration
-010 populates known synthetic `mercy-general` bed assignments without resetting
+Do not re-run the initial migrations or reset demo data. Migration 010
+populates known synthetic `mercy-general` bed assignments without resetting
 patients; it leaves other organizations' locations untouched.
+
+Note that applied version IDs in the Supabase-side ledger do not match these
+local filenames — `supabase/migrations/` and `_migrations` are two separate
+records of the same thing. Check both before applying anything.
 
 Remaining work:
 
-- Apply pending migrations, provision a prescriber, and verify live flows.
+- Doctor Patients / Map / Meds still fall back to the nurse screens; doc pages
+  23–25 specify a table, a distance panel, and condition tabs.
+- A display band for high blood pressure and fever. NEWS2 scores neither, so
+  those cards currently show no badge at all.
 - Remaining typography, spacing, and detailed visual matching to the PDF.
 - Historical-worry escalation and duplicate-escalation feedback issues from the audit.
 - External notifications and EHR medication ordering, if those integrations are wanted later.
+
+### Patient priority and combined score
+
+Patient priority uses NEWS warnings and unresolved escalations ahead of the
+weighted combined score. Open, acknowledged, and overdue escalations remain red
+until assessment or resolution; NEWS totals of 7 or more also display red.
+NEWS 5–6 and an individual parameter scoring 3 display an urgent review warning.
+The backend supplies individual parameter triggers through `news_alert`, using
+its existing NEWS scoring table. Threshold reference:
+[RCP NEWS2 Chart 2](https://www.rcplondon.ac.uk/media/2acdezkd/news2-chart-2_news-thresholds-and-triggers_0.pdf).
+
+The weighted combined score remains separately labeled on its 1–10 display scale.
+Acknowledging an escalation keeps its red priority visible. Existing escalation
+creation rules and persisted model scores retain their current behavior.
+Run `npm run test:risk` for priority regression tests (Node 22.6+).

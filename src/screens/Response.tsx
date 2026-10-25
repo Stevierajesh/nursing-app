@@ -4,7 +4,7 @@ import { Card, ErrorNote, Spinner } from "../components/Primitives";
 import { useAuth } from "../lib/auth";
 import { usePatients } from "../lib/patients";
 import { patientLocation } from "../lib/patientOrder";
-import { riskBand, riskOutOfTen } from "../lib/risk";
+import { patientPriority, riskOutOfTen } from "../lib/risk";
 import { REASON_LABELS, WORRY_LABELS } from "../lib/types";
 
 export default function Response() {
@@ -13,7 +13,8 @@ export default function Response() {
   const { patients, loading, error } = usePatients();
   const p = patients.find((p) => p.id === patientId);
   if (loading) return <Spinner />;
-  const band = p ? riskBand(p.risk_score) : null;
+  const priority = p ? patientPriority(p) : null;
+  const band = priority?.band;
   /*
    * Allergies distinguishes three states on purpose. An unrecorded field must
    * not look like data: a nurse reads a blank allergy line as "none known",
@@ -64,9 +65,9 @@ export default function Response() {
                 .filter(Boolean)
                 .join(" · ")}
             </p>
-            <h1 className="mt-1 text-4xl font-extrabold tracking-tight">
+            <h2 className="mt-1 text-xl font-semibold tracking-tight">
               {p.bed ? `Bed ${p.bed}` : p.display_name}
-            </h1>
+            </h2>
           </header>
 
           <Card>
@@ -88,16 +89,18 @@ export default function Response() {
             <Card>
               <div className="flex items-center gap-4">
                 <span
-                  className={`flex size-14 shrink-0 items-center justify-center rounded-full text-xl font-bold tabular-nums text-ink-200 ${band.dot}`}
+                  aria-label="Latest NEWS" className={`flex size-14 shrink-0 flex-col items-center justify-center rounded-full text-xl font-bold tabular-nums text-ink-200 ${band.dot}`}
                 >
-                  {riskOutOfTen(p.risk_score)}
+                  {p.latest_news ?? "—"}<span className="text-[10px]">NEWS</span>
                 </span>
                 <div className="min-w-0">
                   <p
                     className={`text-xs font-semibold uppercase tracking-wide ${band.text}`}
                   >
-                    Risk score · {band.label}
+                    {priority?.label}
                   </p>
+                  <p className={`mt-1 text-xs ${band.text}`}>{priority?.reason}</p>
+                  <p className="mt-1 text-xs text-ink-400">Combined score {riskOutOfTen(p.risk_score)}/10</p>
                   <p className="mt-1 font-semibold">
                     {p.latest_worry
                       ? `Nurse: ${WORRY_LABELS[p.latest_worry.level]}`
@@ -123,9 +126,11 @@ export default function Response() {
               closed.
             </Card>
           )}
-          <Link to={`/worry/${p.id}`} className="block text-accent">
-            Review patient and record worry →
-          </Link>
+          {me?.user.role !== "prescriber" && (
+            <Link to={`/worry/${p.id}`} className="block text-accent">
+              Review patient and record worry →
+            </Link>
+          )}
         </>
       )}
     </div>

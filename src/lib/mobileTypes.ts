@@ -35,18 +35,42 @@ export interface MedicationClass {
 
 export const UNREVIEWED_PREFIX = "UNREVIEWED";
 
+export interface PrescriptionDraft {
+  medication: string;
+  dose: string;
+  route: string;
+  frequency: string;
+  duration: string;
+  instructions: string;
+}
+
 export interface MedicationReview {
+  prescriptions?: PrescriptionDraft[];
+  reviewed_sections?: number[];
   id: string;
   patient_id: string;
   prescriber_id: string;
   condition: ReviewCondition;
   suggested_class_id: string | null;
   suggested_class?: { label: string; source: string | null } | null;
-  status: "pending" | "reviewed" | "dismissed";
+  /**
+   * pending and escalated are open; the rest are closed. "reviewed" is the
+   * legacy two-state outcome and is never written by current code.
+   */
+  status: "pending" | "escalated" | "approved" | "rejected" | "dismissed" | "reviewed";
   request_note: string;
   review_note: string | null;
+  decision_note: string | null;
   created_at: string;
   reviewed_at: string | null;
+  /** The clock behind the second level of escalation. */
+  sla_deadline: string | null;
+  acknowledged_at: string | null;
+  escalated_at: string | null;
+  escalated_to: string | null;
+  /** A prescriber question back to the nurse. Leaves the request open. */
+  info_requested_at: string | null;
+  info_request_note: string | null;
   vitals_snapshot: Partial<Vitals>;
   patient?: { display_name: string; room: string | null; bed: string | null };
 }

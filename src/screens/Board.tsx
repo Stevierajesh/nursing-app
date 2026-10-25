@@ -10,8 +10,7 @@ export default function Board() {
   const selected = patients.find(p => p.id === selectedId) ?? patients[0];
   if (loading) return <Spinner label="Loading the board" />;
   return (
-    <div className="flex flex-col gap-6 p-4">
-      <h1 className="text-4xl font-extrabold tracking-tight">Risk Assessment</h1>
+    <div className="flex flex-col gap-4 p-4">
       {error && <ErrorNote>{error}</ErrorNote>}
       {patients.length === 0 && !error ? <Card>No patients assigned. Ask the charge nurse to add you to this shift.</Card> : selected && (
         <section aria-label="Input nurse score">

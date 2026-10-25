@@ -1,10 +1,11 @@
+import ClinicalPriority from "../components/ClinicalPriority";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { usePatients } from "../lib/patients";
 import { riskOutOfTen } from "../lib/risk";
-import PatientVitals from "../components/PatientVitals";
+import PatientVitals, { ObservationHistory } from "../components/PatientVitals";
 import {
   WORRY_REASONS,
   WORRY_LABELS,
@@ -18,7 +19,6 @@ import {
   Card,
   ErrorNote,
   NewsBadge,
-  RiskBadge,
   Spinner,
   timeAgo,
 } from "../components/Primitives";
@@ -189,6 +189,7 @@ export default function WorryTap({
           <p className="mt-2 text-lg leading-snug">{result.message}</p>
         </div>
 
+        <ClinicalPriority patient={{ risk_score: result.risk.score, latest_news: result.risk.latest_news, open_escalation: result.escalation ?? detail.escalations.find(escalation => ["open", "acknowledged", "auto_escalated"].includes(escalation.status)) ?? null }} />
         <Card>
           <div className="text-xs uppercase tracking-wide text-ink-400">
             Risk contributions (points out of 10)
@@ -208,7 +209,7 @@ export default function WorryTap({
             />
             <div className="my-2 border-t border-ink-700" />
             <Row
-              label="Fused risk"
+              label="Combined score"
               value={`${riskOutOfTen(result.risk.score)}/10`}
               emphasis
             />
@@ -260,11 +261,11 @@ export default function WorryTap({
     <div
       className={
         embedded
-          ? "grid gap-6 lg:grid-cols-2 lg:items-start"
+          ? "grid gap-6 lg:grid-cols-2 lg:items-stretch"
           : "flex flex-col gap-5 p-4"
       }
     >
-      <div className="flex flex-col gap-5">
+      <div className="flex min-w-0 flex-col gap-5">
         {embedded && header}
         {!embedded && (
           <header>
@@ -281,11 +282,10 @@ export default function WorryTap({
               .filter(Boolean)
               .join(" · ")}
           </p>
-          <h1 className="mt-1 text-3xl font-extrabold tracking-tight">
+          <h2 className="mt-1 text-xl font-semibold tracking-tight">
             {patient.display_name}
-          </h1>
+          </h2>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-400">
-            <RiskBadge score={risk.score} />
             <NewsBadge score={risk.latest_news} band={risk.news_band} />
             {risk.trend_slope_per_hour > 0.25 && (
               <span className="rounded-md border border-slight/30 bg-slight/10 px-2 py-0.5 text-xs font-semibold text-slight">
@@ -303,10 +303,16 @@ export default function WorryTap({
           </header>
         )}
 
-        <PatientVitals patient={patient} vitals={vitals} />
+        <ClinicalPriority patient={{
+          risk_score: risk.score,
+          latest_news: risk.latest_news,
+          news_alert: detail.news_alert,
+          open_escalation: detail.escalations.find(escalation => ["open", "acknowledged", "auto_escalated"].includes(escalation.status)) ?? null,
+        }} />
+        <PatientVitals patient={patient} vitals={vitals} bands={detail.vital_bands} />
       </div>
 
-      <div className="flex flex-col gap-5">
+      <div className="flex min-w-0 flex-col gap-5">
         <section>
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-400">
             How worried are you?
@@ -412,6 +418,8 @@ export default function WorryTap({
                   : "Submit score"}
           </Button>
         </div>
+
+        <ObservationHistory vitals={vitals} />
       </div>
     </div>
   );
