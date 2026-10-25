@@ -1,4 +1,14 @@
-export type Role = "admin" | "charge_nurse" | "nurse";
+export type WorryLevel = 0 | 1 | 2 | 3 | 4;
+
+export const WORRY_LABELS: Record<WorryLevel, string> = {
+  0: "Not worried",
+  1: "Slightly",
+  2: "Somewhat",
+  3: "Worried",
+  4: "Very worried",
+};
+
+export type Role = "admin" | "charge_nurse" | "nurse" | "prescriber";
 
 export type WorryReason =
   | "breathing_off"
@@ -43,10 +53,13 @@ export interface Me {
 }
 
 export interface Vitals {
+  source?: "charted" | "simulation";
+  simulation_run_id?: string | null;
   id: string;
   patient_id: string;
   recorded_at: string;
   heart_rate: number | null;
+  glucose_mg_dl: number | null;
   resp_rate: number | null;
   spo2: number | null;
   systolic_bp: number | null;
@@ -61,7 +74,7 @@ export interface WorrySignal {
   id: string;
   patient_id: string;
   nurse_id: string;
-  level: 0 | 1 | 2;
+  level: WorryLevel;
   reasons: WorryReason[];
   note: string | null;
   capture_ms: number | null;
@@ -90,9 +103,21 @@ export interface Escalation {
 }
 
 export interface Patient {
+  is_simulated?: boolean;
+  health_context?: string | null;
+  /** Free text working diagnosis, not a coded term. */
+  diagnosis?: string | null;
+  /**
+   * null/undefined = not recorded. Empty array = none known, recorded
+   * deliberately. Never collapse the two: a nurse reads a blank allergy field
+   * as "no known allergies".
+   */
+  allergies?: string[] | null;
+  baseline_vitals?: Partial<Vitals> | null;
   id: string;
   display_name: string;
   room: string | null;
+  bed: string | null;
   unit_id: string | null;
   age_band: string | null;
   sex: string | null;

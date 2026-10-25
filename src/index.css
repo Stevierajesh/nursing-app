@@ -1,21 +1,38 @@
 @import "tailwindcss";
 
 /*
- * Dark by default and committed to it. This runs on a phone at 3am in a dim
- * ward corridor; a white screen is hostile in that setting.
+ * Light, per the Salus mockups. Dark mode is gone -- not themed, removed.
+ *
+ * The ink-* numbers now read as surface elevation, not darkness: 900 is the
+ * canvas everything sits on, 800 the cards raised off it, 700/600 the lines
+ * between them, 400/200 the type. That is the same role each step played in
+ * the dark ramp, which is what lets the screens be converted a page at a time
+ * instead of all at once -- a call site that asked for "the colour behind
+ * everything" still gets it. The names are inverted and misleading until that
+ * page-by-page pass finishes; rename to canvas/surface/line/muted/ink then.
  */
 
 @theme {
-  --color-ink-900: #0b1220;
-  --color-ink-800: #0f172a;
-  --color-ink-700: #1a2437;
-  --color-ink-600: #27324a;
-  --color-ink-400: #64748b;
-  --color-ink-200: #cbd5e1;
+  --color-ink-900: #f3f6f8;
+  --color-ink-800: #ffffff;
+  --color-ink-700: #e5e9ee;
+  --color-ink-600: #cfd7e0;
+  --color-ink-400: #5f6b7a;
+  --color-ink-200: #0d1b2a;
 
-  --color-calm: #22c55e;
-  --color-slight: #f59e0b;
-  --color-very: #ef4444;
+  /*
+   * Band colours are darkened from the dark-mode set because they are now read
+   * as text on white. The pale fills the mockups show under them come from
+   * alpha (bg-very/10 and friends), so these double as both.
+   */
+  --color-calm: #15803d;
+  --color-mild: #4d7c0f;
+  --color-slight: #a16207;
+  --color-worried: #c2410c;
+  --color-very: #dc2626;
+
+  /* Deep teal, not the dark theme's cyan: it carries white type now. */
+  --color-accent: #0f6b6b;
 }
 
 html,
@@ -26,7 +43,7 @@ body,
 
 body {
   background: var(--color-ink-900);
-  color: white;
+  color: var(--color-ink-200);
   -webkit-font-smoothing: antialiased;
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -37,6 +54,22 @@ body {
 /* Thumb targets. Every interactive element on the tap screen clears 44px. */
 button {
   touch-action: manipulation;
+}
+
+/* Toasts rise into place. Neutralised by the reduced-motion block below. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.toast-in {
+  animation: toast-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Respect a nurse who has motion sensitivity turned on. */

@@ -1,10 +1,12 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { WORRY_LABELS, type WorryLevel } from "../lib/types";
+import { riskOutOfTen, riskTone } from "../lib/risk";
 
 export function Spinner({ label = "Loading" }: { label?: string }) {
   return (
     <div className="flex items-center justify-center gap-3 py-12 text-ink-400">
       <div
-        className="size-5 animate-spin rounded-full border-2 border-ink-600 border-t-white"
+        className="size-5 animate-spin rounded-full border-2 border-ink-600 border-t-accent"
         role="status"
         aria-label={label}
       />
@@ -21,10 +23,15 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "ghost" | "danger";
 }) {
+  /*
+   * Ghost is the mockups' outline button: white fill, teal edge, teal label --
+   * it reads as secondary next to the solid primary without going grey.
+   */
   const styles = {
-    primary: "bg-white text-ink-900 active:bg-ink-200 disabled:bg-ink-600",
+    primary:
+      "bg-accent text-white active:brightness-90 disabled:bg-ink-600 disabled:text-ink-400",
     ghost:
-      "bg-ink-700 text-white active:bg-ink-600 border border-ink-600 disabled:opacity-50",
+      "bg-ink-800 text-accent active:bg-ink-900 border border-accent/35 disabled:opacity-50",
     danger: "bg-very text-white active:brightness-90 disabled:opacity-50",
   }[variant];
 
@@ -68,14 +75,20 @@ export function NewsBadge({
 }
 
 /** Dot indicating the most recent worry level on a patient. */
-export function WorryDot({ level }: { level: 0 | 1 | 2 }) {
-  if (level === 0) return null;
-  const color = level === 2 ? "bg-very" : "bg-slight";
-  const label = level === 2 ? "Very worried" : "Slightly worried";
+export function WorryDot({ level }: { level: WorryLevel }) {
+  const color = ["bg-calm", "bg-mild", "bg-slight", "bg-worried", "bg-very"][level];
   return (
-    <span className="inline-flex items-center gap-1.5" title={label}>
+    <span className="inline-flex items-center gap-1.5" title={WORRY_LABELS[level]}>
       <span className={`size-2 rounded-full ${color}`} aria-hidden />
-      <span className="text-xs text-ink-200">{label}</span>
+      <span className="text-xs text-ink-200">{WORRY_LABELS[level]}</span>
+    </span>
+  );
+}
+
+export function RiskBadge({ score }: { score: number }) {
+  return (
+    <span className={`text-lg font-bold tabular-nums ${riskTone(score)}`}>
+      Risk {riskOutOfTen(score)}/10
     </span>
   );
 }
@@ -89,7 +102,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-2xl border border-ink-700 bg-ink-800 p-4 ${className}`}
+      className={`rounded-2xl border border-ink-700 bg-ink-800 p-4 shadow-sm ${className}`}
     >
       {children}
     </div>

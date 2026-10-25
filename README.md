@@ -83,3 +83,67 @@ that folding. Don't remove it.
 make build        # ~491 kB raw / ~142 kB gzipped
 make check        # typecheck + lint + build
 ```
+
+## Five-level worry scale and risk display
+
+Worry levels are `0=Not worried`, `1=Slightly`, `2=Somewhat`, `3=Worried`,
+`4=Very worried`. Intensity contributes proportionally to fused risk. Levels
+1–3 require both elevated NEWS and an upward trend to escalate; level 4 can
+pair with either. High NEWS still escalates independently of worry.
+
+The API retains its internal 0–100 risk score. The nurse app displays
+`clamp(round(score / 10), 1, 10)` with PDF bands: 1–3 low, 4–5 watch,
+6–7 elevated, 8–10 high. NEWS is shown separately on its original scale.
+
+The pending migrations and deployment order are listed below. Migration 007
+preserves historical “Very worried” records by moving the old value 2 to 4.
+
+## Mobile workflow
+
+The default page is the unit map (`/`); `/map` redirects there. Board lives at
+`/board`. The map shows room/bed occupancy and risk for patients the user can
+access. Unassigned occupied beds show occupancy without patient identity.
+
+Bottom navigation opens Board, Patients, Map, Meds, and Alerts. The Board has
+inline worry capture and a priority list. Patients supports risk, worry, and
+natural bed sorting. Data refreshes every 30 seconds and after mutations.
+
+Assigned nurses, charge nurses, and admins can acknowledge and assess an
+escalation from Alerts or Respond. Timestamps are server-written and retries
+preserve the original assessment. Only charge nurses and admins can edit bed
+assignments or add inventory; duplicate active occupancy is rejected by Postgres.
+
+Meds supports blood pressure, blood sugar, and heart rate review requests.
+A nurse chooses a patient and prescriber, writes a reason, and sends the request
+to the prescriber's in-app queue. Only the assigned prescriber can complete it;
+the response returns to the nurse's request list. Requests may be dismissed
+with a reason. This workflow records reviews, not medication orders.
+
+An administrator can set the `prescriber` role through dashboard Admin. Future
+Python seed runs create `prescriber@mercygeneral.example`; existing live users
+are not changed automatically. Never re-run the destructive seed just to add a
+prescriber. Assign the role to an appropriate existing user or create a user
+through the admin API.
+
+## Migration status
+
+Backend code and migrations are updated locally. New migrations are:
+
+- 007: five worry levels and historical Very worried preservation.
+- 008: patient bed identifiers.
+- 009: prescriber role (must commit before migration 010).
+- 010: unit bed inventory, demo bed population, unique active bed occupancy,
+  glucose observations, medication reviews, and RLS policies.
+
+None of migrations 007–010 have been applied to the live Supabase database
+by this work. Apply those pending files in order, then deploy/restart the API
+and clients. Do not re-run the initial migrations or reset demo data. Migration
+010 populates known synthetic `mercy-general` bed assignments without resetting
+patients; it leaves other organizations' locations untouched.
+
+Remaining work:
+
+- Apply pending migrations, provision a prescriber, and verify live flows.
+- Remaining typography, spacing, and detailed visual matching to the PDF.
+- Historical-worry escalation and duplicate-escalation feedback issues from the audit.
+- External notifications and EHR medication ordering, if those integrations are wanted later.

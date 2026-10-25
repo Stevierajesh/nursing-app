@@ -14,11 +14,13 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       manifest: {
-        name: "Nurse Worry Layer",
-        short_name: "Worry",
+        name: "Salus",
+        short_name: "Salus",
         description: "One tap to turn nursing intuition into an early warning.",
-        theme_color: "#0f172a",
-        background_color: "#0f172a",
+        // Must track --color-ink-900 in index.css, or the install splash and
+        // the Android status bar frame a light app in the old dark navy.
+        theme_color: "#f3f6f8",
+        background_color: "#f3f6f8",
         display: "standalone",
         orientation: "portrait",
         start_url: "/",
