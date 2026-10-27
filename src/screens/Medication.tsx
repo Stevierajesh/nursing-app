@@ -5,7 +5,7 @@ import { useAuth } from "../lib/auth";
 import { usePatients } from "../lib/patients";
 import { patientLocation, sortPatients } from "../lib/patientOrder";
 import { patientPriority, riskBand, riskOutOfTen } from "../lib/risk";
-import { CONDITIONS, UNREVIEWED_PREFIX, type MedicationClass, type Prescriber, type ReviewCondition } from "../lib/mobileTypes";
+import { CONDITIONS, UNREVIEWED_PREFIX, type MedicationClass, type Prescriber, type Recommendation, type ReviewCondition } from "../lib/mobileTypes";
 import type { Vitals, Patient } from "../lib/types";
 import { Button, Card, ErrorNote, Spinner, timeAgo } from "../components/Primitives";
 
@@ -40,17 +40,19 @@ function NurseMedication() {
   const [condition, setCondition] = useState<ReviewCondition>("blood_pressure");
   const [prescribers, setPrescribers] = useState<Prescriber[]>([]);
   const [classes, setClasses] = useState<MedicationClass[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [sent, setSent] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const load = useCallback(async () => {
     try {
-      const [p, c] = await Promise.all([
+      const [p, c, r] = await Promise.all([
         api.get<{ prescribers: Prescriber[] }>("/api/v1/medication/prescribers"),
         api.get<{ classes: MedicationClass[] }>("/api/v1/medication/classes"),
+        api.get<{ recommendations: Recommendation[] }>("/api/v1/medication/recommendations"),
       ]);
-      setPrescribers(p.prescribers); setClasses(c.classes); setError("");
+      setPrescribers(p.prescribers); setClasses(c.classes); setRecommendations(r.recommendations); setError("");
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load medication options"); }
     finally { setLoading(false); }
   }, []);
@@ -74,16 +76,23 @@ function NurseMedication() {
     </div>
     {!visible.length && <Card>{patients.length ? "No patients to show for this view." : "No patients on your active list."}</Card>}
     <div className="grid items-start gap-4 md:grid-cols-2">
-      {visible.map(patient => <MedicationPatientCard key={`${condition}:${patient.id}`} patient={patient} condition={condition} canRequest={canRequest} classes={classes.filter(c => c.condition === condition)} prescribers={prescribers} sentTo={sent[`${condition}:${patient.id}`]} onSent={name => setSent(previous => ({ ...previous, [`${condition}:${patient.id}`]: name }))} onDismiss={() => setDismissed(previous => [...previous, keyFor(patient)])} />)}
+      {visible.map(patient => <MedicationPatientCard key={`${condition}:${patient.id}`} patient={patient} condition={condition} canRequest={canRequest} classes={classes.filter(c => c.condition === condition)} recommendation={recommendations.find(r => r.patient_id === patient.id && r.condition === condition)} prescribers={prescribers} sentTo={sent[`${condition}:${patient.id}`]} onSent={name => setSent(previous => ({ ...previous, [`${condition}:${patient.id}`]: name }))} onDismiss={() => setDismissed(previous => [...previous, keyFor(patient)])} />)}
     </div>
     <p className="text-xs leading-5 text-ink-400">For prescriber review. A prescriber decides treatment; sending a concern does not place a medication order.</p>
   </div>;
 }
 
-function MedicationPatientCard({ patient, condition, canRequest, classes, prescribers, sentTo, onSent, onDismiss }: {
+const BAND_TONE: Record<string, string> = {
+  watch: "text-slight",
+  high: "text-worried",
+  critical: "text-very",
+};
+
+function MedicationPatientCard({ patient, condition, canRequest, classes, recommendation, prescribers, sentTo, onSent, onDismiss }: {
   patient: Patient;
   condition: ReviewCondition;
   classes: MedicationClass[];
+  recommendation?: Recommendation;
   canRequest: boolean;
   prescribers: Prescriber[];
   sentTo?: string;
@@ -96,6 +105,11 @@ function MedicationPatientCard({ patient, condition, canRequest, classes, prescr
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // A recommendation only counts as actionable once the rules resolved it to a
+  // class that is actually in the vocabulary. A finding with no class (a low
+  // reading) still shows, but there is nothing to accept.
+  const suggestable = recommendation?.class_id ? recommendation : undefined;
+  const accepted = Boolean(suggestable && classId === suggestable.class_id);
   const recipient = prescribers.find(p => p.id === prescriberId) ?? prescribers[0];
   const score = riskOutOfTen(patient.risk_score);
   const band = riskBand(patient.risk_score);
@@ -127,12 +141,41 @@ function MedicationPatientCard({ patient, condition, canRequest, classes, prescr
       <p className="mt-2 text-sm">{CONDITIONS[condition]}: {reading(patient.latest_vitals, condition)}</p>
       <p className="mt-1 text-xs leading-5 text-ink-400">{patient.latest_vitals ? `Observed ${timeAgo(patient.latest_vitals.recorded_at)}. ` : ""}Send your concern and optionally suggest a medication class for the prescriber to review.</p>
     </div>
+
+    {/* What Salus makes of the reading. The band and its cut point are citable;
+        the class is not, and the caveat under it says so rather than letting
+        the suggestion borrow authority from the band above it. */}
+    {recommendation && <div className="mt-3 rounded-2xl border border-ink-600 bg-ink-800 p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-ink-400">Salus suggests</p>
+        <p className={`text-[11px] font-bold uppercase tracking-wide ${BAND_TONE[recommendation.band] ?? "text-ink-400"}`}>{recommendation.band}</p>
+      </div>
+      {suggestable ? <p className="mt-2 text-sm font-semibold">{suggestable.class_label}</p>
+        : <p className="mt-2 text-sm font-semibold text-slight">No medication class for this finding</p>}
+      <p className="mt-1 text-xs leading-5 text-ink-400">{recommendation.reading} · {recommendation.rationale}</p>
+      {suggestable ? <p className="mt-2 text-xs leading-5 text-slight">The cut point above is published; the class is a placeholder mapping that has not been clinically reviewed. You decide what to send, and a prescriber decides treatment.</p>
+        : <p className="mt-2 text-xs leading-5 text-slight">A low reading usually calls for withholding an agent rather than starting one, and this list cannot express that. Send your concern in your own words.</p>}
+      {suggestable && canRequest && <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" className="rounded-full! px-4 text-xs" disabled={!prescribers.length} aria-pressed={accepted} onClick={() => { setClassId(suggestable.class_id!); setExpanded(true); }}>
+          {accepted ? "Accepted" : "Accept"}
+        </Button>
+        <Button type="button" variant="ghost" className="rounded-full! px-4 text-xs" disabled={!prescribers.length} onClick={() => { setClassId(""); setExpanded(true); }}>
+          Counter with another class
+        </Button>
+      </div>}
+    </div>}
     {sentTo && <p role="status" className="mt-3 text-xs font-medium text-calm">Concern sent to {sentTo}.</p>}
     {error && <div className="mt-3"><ErrorNote>{error}</ErrorNote></div>}
     {expanded ? <form onSubmit={send} className="mt-4">
       <fieldset disabled={busy} className="space-y-3">
         <label className="block text-sm">Prescriber<select required value={recipient?.id ?? ""} onChange={e => setPrescriberId(e.target.value)} className={INPUT}>{!prescribers.length && <option value="">No prescriber configured</option>}{prescribers.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select></label>
-        {classes.length > 0 && <label className="block text-sm">Suggested class (optional)<select value={classId} onChange={e => setClassId(e.target.value)} className={INPUT}><option value="">No class suggested</option>{classes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>}
+        {classes.length > 0 && <label className="block text-sm">Suggested class (optional)<select value={classId} onChange={e => setClassId(e.target.value)} className={INPUT}><option value="">No class suggested</option>{classes.map(c => <option key={c.id} value={c.id}>{c.label}{suggestable && c.id === suggestable.class_id ? " · Salus suggestion" : ""}</option>)}</select></label>}
+        {/* Says what the record will show. The verdict itself is derived on the
+            server from the class that arrives, so this is a preview of that,
+            not the thing being sent. */}
+        {suggestable && <p className="text-xs text-ink-400">{accepted ? "Recorded as: accepted the Salus suggestion."
+          : classId ? "Recorded as: countered the Salus suggestion."
+          : "Recorded as: declined the Salus suggestion, no class sent."}</p>}
         {classes.some(c => (c.source ?? "").startsWith(UNREVIEWED_PREFIX)) && <p className="text-xs text-slight">This class list has not been clinically reviewed for this unit. The prescriber decides treatment.</p>}
         <label className="block text-sm">Your concern<textarea required maxLength={2000} rows={3} value={note} onChange={e => setNote(e.target.value)} placeholder="Describe your concern and medication question." className={INPUT} /></label>
         <div className="flex gap-2"><Button type="submit" className="flex-1 rounded-full" disabled={!recipient || !note.trim()}>{busy ? "Sending…" : "Send to prescriber"}</Button><Button type="button" variant="ghost" className="rounded-full" onClick={() => setExpanded(false)}>Cancel</Button></div>

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import EscalationActions from "../components/EscalationActions";
+import NurseNotes from "../components/NurseNotes";
+import PatientHistory from "../components/PatientHistory";
 import PatientVitals from "../components/PatientVitals";
 import { Card, ErrorNote, Spinner } from "../components/Primitives";
 import { api } from "../lib/api";
@@ -13,7 +15,7 @@ import { REASON_LABELS, WORRY_LABELS, type PatientDetail } from "../lib/types";
 export default function Response() {
   const { patientId } = useParams();
   const { me } = useAuth();
-  const { patients, loading, error } = usePatients();
+  const { patients, loading, error, refresh } = usePatients();
   /*
    * The patient list carries one latest-vitals snapshot, not the series, so
    * this screen used to show an escalation with no observations behind it --
@@ -21,23 +23,31 @@ export default function Response() {
    * that produced it. Same detail fetch and 15s cadence as the worry screen.
    */
   const [detail, setDetail] = useState<PatientDetail | null>(null);
+  const loadDetail = useCallback(
+    () =>
+      patientId
+        ? api
+            .get<PatientDetail>(`/api/v1/patients/${patientId}`)
+            .then(setDetail)
+            .catch(() => {
+              /* The escalation actions below stay usable without the series. */
+            })
+        : Promise.resolve(),
+    [patientId],
+  );
   useEffect(() => {
     if (!patientId) return;
-    let active = true;
-    const load = () =>
-      api
-        .get<PatientDetail>(`/api/v1/patients/${patientId}`)
-        .then((d) => active && setDetail(d))
-        .catch(() => {
-          /* The escalation actions below stay usable without the series. */
-        });
-    void load();
-    const timer = setInterval(() => void load(), 15000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [patientId]);
+    void loadDetail();
+    const timer = setInterval(() => void loadDetail(), 15000);
+    return () => clearInterval(timer);
+  }, [patientId, loadDetail]);
+
+  // Charting a note or saving history changes both payloads: the note list
+  // lives on the detail, the history columns on the patient row.
+  const reload = useCallback(() => {
+    void loadDetail();
+    void refresh();
+  }, [loadDetail, refresh]);
   const p = patients.find((p) => p.id === patientId);
   if (loading) return <Spinner />;
   const priority = p ? patientPriority(p) : null;
@@ -177,6 +187,16 @@ export default function Response() {
                 Review patient and record worry →
               </Link>
             )}
+
+            {/* Sections 4 and 5 of the prescriber's approval review are fed
+                from here. Before this screen could write them, both rendered
+                "not recorded" for every patient in the system. */}
+            <NurseNotes
+              patientId={p.id}
+              notes={detail?.nurse_notes ?? []}
+              onCharted={reload}
+            />
+            <PatientHistory patient={p} onSaved={reload} />
           </div>
           </div>
         </>

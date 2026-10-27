@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button, Card, ErrorNote, Spinner, timeAgo } from "../components/Primitives";
+import DoctorEscalations from "../components/DoctorEscalations";
 import { api } from "../lib/api";
 import { CONDITIONS } from "../lib/mobileTypes";
 import type { MedicationReview } from "../lib/mobileTypes";
@@ -67,11 +68,17 @@ export default function DoctorAlerts() {
     <div className="flex flex-col gap-6">
       <div>
         <p className="mt-1 text-sm text-ink-400">
-          Medication requests waiting for your approval.
+          Deteriorating patients escalated to you, and medication requests waiting
+          for your approval.
         </p>
       </div>
 
       {error && <ErrorNote>{error}</ErrorNote>}
+
+      {/* Above the medication queue on purpose: a patient whose nurse and whose
+          vitals both say they are going off is more urgent than a decision
+          about a drug class. */}
+      <DoctorEscalations />
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div>

@@ -5,7 +5,7 @@ import { Button, Card, ErrorNote, Spinner, timeAgo } from "../components/Primiti
 import RiskHistoryChart from "../components/RiskHistoryChart";
 import Sparkline from "../components/Sparkline";
 import { detailPriority, riskOutOfTen } from "../lib/risk";
-import { CONDITIONS, UNREVIEWED_PREFIX } from "../lib/mobileTypes";
+import { CONDITIONS, NURSE_ACTION_LABELS, UNREVIEWED_PREFIX } from "../lib/mobileTypes";
 import type { MedicationReview, PrescriptionDraft } from "../lib/mobileTypes";
 import { WORRY_LABELS } from "../lib/types";
 import type { PatientDetail, VitalBands, Vitals } from "../lib/types";
@@ -520,9 +520,39 @@ export default function ApprovalReview() {
               </p>
             )}
             <p className="mt-3 rounded-xl bg-ink-900 p-3 text-sm">{review.request_note}</p>
+
+            {/* Whether the nurse agreed with Salus, and what Salus said. A
+                prescriber reading "countered" knows the person at the bedside
+                looked at a suggestion and decided against it, which is a
+                different piece of information from the class itself. */}
+            <div className="mt-3 rounded-xl border border-ink-700 bg-ink-900 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-ink-400">
+                Salus suggestion
+              </p>
+              {review.recommended_class ? (
+                <p className="mt-2 text-sm">
+                  {review.recommended_class.label}
+                  {review.recommended_band ? ` · ${review.recommended_band} band` : ""}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-ink-400">
+                  Salus had no suggestion for this reading.
+                </p>
+              )}
+              <p className="mt-1 text-xs text-ink-400">
+                {NURSE_ACTION_LABELS[review.nurse_action] ?? review.nurse_action}
+              </p>
+            </div>
+
             {unreviewedVocab && (
               <p className="mt-3 text-xs font-semibold text-slight">
                 This class list has not been clinically reviewed for this unit.
+              </p>
+            )}
+            {review.recommended_class && (
+              <p className="mt-2 text-xs font-semibold text-slight">
+                The Salus suggestion comes from a placeholder rule set, not a
+                reviewed protocol.
               </p>
             )}
           </Section>

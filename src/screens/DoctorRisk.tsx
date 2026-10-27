@@ -38,8 +38,15 @@ export default function DoctorRisk() {
 
   if (loading) return <Spinner label="Loading your unit" />;
 
+  // Only escalations routed to a physician count as "waiting on me". A
+  // prescriber is org-wide, so without the second clause this tile would count
+  // every unacknowledged escalation on the unit -- including the objective-only
+  // ones the nursing tier owns -- and hand a doctor a number they cannot clear.
   const critical = patients.filter(
-    (p) => p.open_escalation && !p.open_escalation.acknowledged_at,
+    (p) =>
+      p.open_escalation &&
+      !p.open_escalation.acknowledged_at &&
+      p.escalation_reaches_physician,
   );
   const attention = [...patients]
     .filter((p) => patientPriority(p).rank >= 2)
@@ -82,10 +89,12 @@ export default function DoctorRisk() {
           {/* The doc promises push, SMS and a phone call here. None of those
               exist in the backend, so this says what actually happens. */}
           <p className="mt-4 rounded-2xl border border-very/25 bg-very/10 px-4 py-3 text-xs leading-relaxed">
-            <span className="font-bold text-very">Red score?</span> The request
-            is escalated to every prescriber on the unit if nobody responds
-            inside the response window. Alerts appear in Salus while you are
-            signed in.
+            <span className="font-bold text-very">What reaches you.</span> A
+            patient whose nurse and whose vitals both read as deteriorating comes
+            to you straight away. Escalations on vitals alone stay with the
+            nursing tier, and anything they do not answer inside the response
+            window widens to every prescriber on the unit. Alerts appear in Salus
+            while you are signed in — there is no pager, SMS or phone call.
           </p>
         </Card>
 

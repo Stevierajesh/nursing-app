@@ -13,7 +13,13 @@ export default function EscalationActions({ patient, compact = false }: { patien
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const escalation = patient.open_escalation;
-  if (!escalation || me?.user.role === "prescriber") return null;
+  // A prescriber may respond only to escalations that were actually routed to
+  // them -- a pairing rule, or one the nursing tier let breach its SLA. The
+  // backend decides which those are and says so on the patient payload; it
+  // also enforces it, so this only keeps the app from offering a button that
+  // would come back 403.
+  if (!escalation) return null;
+  if (me?.user.role === "prescriber" && !patient.escalation_reaches_physician) return null;
   async function act(action: "acknowledge" | "assess") {
     if (!escalation || busy) return;
     setBusy(true);

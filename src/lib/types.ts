@@ -169,6 +169,13 @@ export interface Patient {
   latest_worry: WorrySignal | null;
   open_escalation: Escalation | null;
   escalation_rule_label: string | null;
+  /**
+   * Whether this escalation was routed to a physician. Decided by the backend
+   * (`reaches_physician`) rather than re-derived from `rule` here, so the
+   * response actions a prescriber is offered always match the ones the API
+   * will actually accept.
+   */
+  escalation_reaches_physician?: boolean;
 }
 
 export interface WorryResponse {

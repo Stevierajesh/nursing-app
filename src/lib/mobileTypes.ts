@@ -35,6 +35,75 @@ export interface MedicationClass {
 
 export const UNREVIEWED_PREFIX = "UNREVIEWED";
 
+/**
+ * What Salus recommends for one patient and condition, computed from their
+ * latest observation by `services/recommendation.py`.
+ *
+ * Two provenances ride along and both matter. `rationale` is the citable half
+ * — which published cut point the reading fell in. `rules_source` is the
+ * uncitable half — the band-to-class mapping, which is a placeholder. Any
+ * surface showing `class_label` must show that it is unreviewed.
+ *
+ * `class_label` is null when there is a finding but no class for it: a low
+ * reading, where the answer is usually to withhold an agent rather than start
+ * one, and this vocabulary cannot express that.
+ */
+export interface Recommendation {
+  patient_id: string;
+  condition: ReviewCondition;
+  band: "watch" | "high" | "critical";
+  reading: string;
+  rationale: string;
+  class_label: string | null;
+  class_id: string | null;
+  class_source: string | null;
+  rules_version: string;
+  rules_source: string;
+}
+
+/** What the nurse did with the recommendation. Derived server-side. */
+export type NurseAction = "accepted" | "countered" | "declined" | "unprompted" | "none";
+
+export const NURSE_ACTION_LABELS: Record<NurseAction, string> = {
+  accepted: "Accepted the Salus suggestion",
+  countered: "Countered with a different class",
+  declined: "Declined the suggestion, sent no class",
+  unprompted: "Suggested a class with no Salus suggestion",
+  none: "Free-text request, no class",
+};
+
+/**
+ * A deterioration escalation as the prescriber queue receives it, with the
+ * nurse's own words joined on.
+ *
+ * The backend only sends a prescriber the rows that reached them -- a pairing
+ * rule, where nurse concern and NEWS2 agreed, or anything the nursing tier let
+ * breach its SLA. Objective-only escalations stay with the nursing tier, so
+ * this queue is never the whole board.
+ */
+export interface QueuedEscalation {
+  id: string;
+  patient_id: string;
+  rule: string;
+  rule_label?: string;
+  status: "open" | "acknowledged" | "assessed" | "resolved" | "auto_escalated";
+  triggered_at: string;
+  sla_deadline: string | null;
+  acknowledged_at: string | null;
+  assessed_at: string | null;
+  patient?: { id: string; display_name: string; room: string | null; unit_id: string | null };
+  worry_signal?: {
+    id: string;
+    level: number;
+    reasons: string[];
+    note: string | null;
+    created_at: string;
+    nurse?: { id: string; full_name: string } | null;
+  } | null;
+  ack_by?: { id: string; full_name: string } | null;
+  assess_by?: { id: string; full_name: string } | null;
+}
+
 export interface PrescriptionDraft {
   medication: string;
   dose: string;
@@ -53,6 +122,12 @@ export interface MedicationReview {
   condition: ReviewCondition;
   suggested_class_id: string | null;
   suggested_class?: { label: string; source: string | null } | null;
+  /** What Salus recommended when the nurse sent this. Null = it had no opinion. */
+  recommended_class_id: string | null;
+  recommended_class?: { label: string; source: string | null } | null;
+  recommended_band: "watch" | "high" | "critical" | null;
+  recommendation_rules_version: string | null;
+  nurse_action: NurseAction;
   /**
    * pending and escalated are open; the rest are closed. "reviewed" is the
    * legacy two-state outcome and is never written by current code.
