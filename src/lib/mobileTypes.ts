@@ -51,7 +51,7 @@ export const UNREVIEWED_PREFIX = "UNREVIEWED";
 export interface Recommendation {
   patient_id: string;
   condition: ReviewCondition;
-  band: "watch" | "high" | "critical";
+  band: "low" | "watch" | "high" | "critical";
   reading: string;
   rationale: string;
   class_label: string | null;
@@ -122,10 +122,10 @@ export interface MedicationReview {
   condition: ReviewCondition;
   suggested_class_id: string | null;
   suggested_class?: { label: string; source: string | null } | null;
-  /** What Salus recommended when the nurse sent this. Null = it had no opinion. */
+  /** Class suggested at send time. Null also covers low findings with no class. */
   recommended_class_id: string | null;
   recommended_class?: { label: string; source: string | null } | null;
-  recommended_band: "watch" | "high" | "critical" | null;
+  recommended_band: Recommendation["band"] | null;
   recommendation_rules_version: string | null;
   nurse_action: NurseAction;
   /**
